@@ -18,6 +18,7 @@
     *   **Confluence Matrix**: A 5-point checklist for every trade signal.
     *   **Portfolio Heatmap**: Visualizes risk exposure and "Rekt" levels.
     *   **Signal Lights**: Green (Go), Yellow (Wait), Red (Danger) indicators in the watchlist.
+    *   **Paper Trading Engine**: Simulate execution and track PnL with audio feedback.
 *   **Backend & Database**:
     *   **Node/Express**: Handles API rate limiting and technical analysis calculations.
     *   **SQLite**: Stores signal history for pattern recognition and analytics.
@@ -95,6 +96,24 @@ sniper-scout/
 ├── server.js          # Express Server Entry Point
 └── README.md          # Documentation
 ```
+
+## 🔒 Security & Architecture Disclosure
+
+**Important:** This application is currently designed as a **locally hosted simulation tool**. Before deploying to a public server or using it for real-money trading, the following security improvements are required:
+
+1.  **CORS Policy**: The current server uses `app.use(cors())`, which allows all origins. In production, restrict this to your specific frontend domain.
+2.  **Input Validation**: Ensure all API parameters (e.g., `?limit=50`) are strictly validated as integers to prevent potential SQL injection vectors, although SQLite parameterized queries are currently used.
+3.  **Rate Limiting**: Implement `express-rate-limit` on the backend to prevent abuse and ensure compliance with CoinGecko's API terms (currently 10-30 calls/min for free tier).
+4.  **Environment Variables**: Move port numbers and API endpoints to a `.env` file.
+5.  **HTTPS**: The application currently runs on HTTP. Use a reverse proxy (Nginx) or SSL certificates for production deployment.
+
+## 🚧 Roadmap & Future Improvements
+
+*   [ ] **Live Order Execution**: Connect to CEX (Binance/Bybit) APIs for real trade execution.
+*   [ ] **User Authentication**: Add login capabilities to store User Profiles in the database.
+*   [ ] **Advanced Backtesting**: Run the strategy engine against 30-day historical data to generate real win-rate metrics.
+*   [ ] **Mobile Support**: Optimize the layout for mobile viewports (currently optimized for desktop terminals).
+*   [ ] **WebSockets**: Replace HTTP polling with WebSockets for sub-second price updates.
 
 ## ⚠️ Disclaimer
 

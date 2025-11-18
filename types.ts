@@ -11,6 +11,7 @@ export interface CoinData {
   minusDI: number;
   stochasticK: number;
   volumeRatio: number; // current / avg
+  sparkline: number[]; // 7d price history
   timestamp: number;
 }
 
@@ -86,4 +87,5 @@ export interface ActivePosition {
   slPrice: number;
   liqPrice: number;
   ageMinutes: number;
+  timestamp: number; // For PnL calc
 }

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getInitialCoins, fetchLiveMarketData } from './services/marketData';
 import { analyzeCoin, getSession, getSessionBias } from './services/strategyEngine';
 import { CoinData, StrategyAnalysis, MarketContext, CharacterProfile, Trade, ActivePosition } from './types';
@@ -10,7 +10,8 @@ import { BehavioralWidget } from './components/BehavioralWidget';
 import { ActiveTradeMonitor } from './components/ActiveTradeMonitor';
 import { MarketPulse } from './components/MarketPulse';
 import { SmartHints } from './components/SmartHints';
-import { Radar, AlertTriangle, Activity, Database, Clock, LayoutDashboard, Zap, Bitcoin, User } from 'lucide-react';
+import { MiniChart } from './components/MiniChart';
+import { Radar, AlertTriangle, Activity, Database, Clock, LayoutDashboard, Zap, Bitcoin, User, Volume2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [coins, setCoins] = useState<Record<string, CoinData>>(getInitialCoins());
@@ -21,20 +22,68 @@ const App: React.FC = () => {
   
   // New State Features
   const [userProfile, setUserProfile] = useState<CharacterProfile>('burry');
-  // Mock History Data for Behavioral Widget
   const [tradeHistory] = useState<Trade[]>([
       { id: '1', symbol: 'SOL', type: 'LONG', pnl: 125, timestamp: Date.now() - 10000000 },
       { id: '2', symbol: 'ETH', type: 'SHORT', pnl: 45, timestamp: Date.now() - 20000000 },
-      { id: '3', symbol: 'BTC', type: 'SHORT', pnl: 12, timestamp: Date.now() - 30000000 },
-      { id: '4', symbol: 'ADA', type: 'LONG', pnl: -15, timestamp: Date.now() - 40000000 },
-      { id: '5', symbol: 'XRP', type: 'SHORT', pnl: 88, timestamp: Date.now() - 50000000 },
   ]);
-  // Mock Active Positions for Heat Widget
-  const [activePositions] = useState<ActivePosition[]>([
-      { id: 'a1', symbol: 'ETH', type: 'SHORT', entryPrice: 2350, currentPrice: 2310, sizeUsd: 5000, leverage: 20, tpPrice: 2100, slPrice: 2450, liqPrice: 2500, ageMinutes: 45 }
+  
+  // PAPER TRADING STATE
+  const [activePositions, setActivePositions] = useState<ActivePosition[]>([
+      { id: 'a1', symbol: 'ETH', type: 'SHORT', entryPrice: 2350, currentPrice: 2310, sizeUsd: 5000, leverage: 20, tpPrice: 2100, slPrice: 2450, liqPrice: 2500, ageMinutes: 45, timestamp: Date.now() - 2700000 }
   ]);
 
-  // Data Polling Loop
+  // SOUND FX (Simple simulated beeps)
+  const playSound = (type: 'PING' | 'EXECUTE') => {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    if (type === 'PING') {
+        osc.frequency.value = 800;
+        gain.gain.value = 0.1;
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.1);
+        osc.stop(ctx.currentTime + 0.1);
+    } else {
+        // Execute sound (lower, longer)
+        osc.frequency.value = 150;
+        osc.type = 'square';
+        gain.gain.value = 0.1;
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.4);
+        osc.stop(ctx.currentTime + 0.4);
+    }
+  };
+
+  // EXECUTE TRADE FUNCTION
+  const handleExecuteTrade = (symbol: string, type: 'LONG' | 'SHORT', size: number, leverage: number, entry: number, tp: number, sl: number) => {
+      const liqPrice = type === 'LONG' 
+        ? entry * (1 - (1/leverage)) 
+        : entry * (1 + (1/leverage));
+
+      const newPos: ActivePosition = {
+          id: Date.now().toString(),
+          symbol,
+          type,
+          entryPrice: entry,
+          currentPrice: entry,
+          sizeUsd: size,
+          leverage,
+          tpPrice: tp,
+          slPrice: sl,
+          liqPrice,
+          ageMinutes: 0,
+          timestamp: Date.now()
+      };
+
+      setActivePositions(prev => [newPos, ...prev]);
+      playSound('EXECUTE');
+      // Trigger visual feedback?
+  };
+
+  // Data Polling Loop & PnL Updater
   useEffect(() => {
     setSession(getSession());
 
@@ -44,6 +93,22 @@ const App: React.FC = () => {
           setCoins(newCoins);
           setIsConnected(true);
           
+          // PNL UPDATE LOOP
+          setActivePositions(prevPositions => {
+             return prevPositions.map(pos => {
+                 const liveCoin = newCoins[pos.symbol];
+                 if (!liveCoin) return pos;
+                 
+                 const ageMins = Math.floor((Date.now() - pos.timestamp) / 60000);
+                 
+                 return {
+                     ...pos,
+                     currentPrice: liveCoin.price,
+                     ageMinutes: ageMins
+                 };
+             });
+          });
+
           if (!newCoins[selectedSymbol] && Object.keys(newCoins).length > 0) {
              setSelectedSymbol(Object.keys(newCoins).find(k => k !== 'BTC') || 'BTC');
           }
@@ -71,7 +136,7 @@ const App: React.FC = () => {
   const coinList = (Object.values(coins) as CoinData[]).filter(c => c.symbol !== 'BTC');
   
   // Calculate Heat
-  const currentHeat = activePositions.length * 15; // Mock 15% per trade
+  const currentHeat = activePositions.reduce((acc, pos) => acc + (pos.sizeUsd / 33392 * 100), 0);
 
   return (
     <div className="min-h-screen bg-black text-gray-300 font-sans selection:bg-green-500/30 overflow-hidden flex flex-col">
@@ -137,8 +202,6 @@ const App: React.FC = () => {
                     const isSuperHot = listAnalysis.score >= 4;
                     const isTrap = listAnalysis.type === 'DANGER_TRAP';
                     
-                    // Filter based on profile? (Optional, currently showing all but highlighting)
-                    
                     return (
                         <button 
                             key={coin.symbol}
@@ -183,6 +246,21 @@ const App: React.FC = () => {
 
         {/* MIDDLE: Intelligence Matrix */}
         <div className="lg:col-span-6 space-y-4 overflow-y-auto scrollbar-hide pb-10">
+           
+           {/* FEATURE 1: CHART */}
+           <div className="mb-4">
+               <div className="flex justify-between items-end mb-1">
+                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      {activeCoin.symbol} 
+                      <span className="text-gray-500 text-sm font-normal">7D Price Action</span>
+                   </h2>
+                   <div className="text-xs text-gray-500 flex items-center gap-1">
+                       <Activity size={12} /> LIVE FEED
+                   </div>
+               </div>
+               <MiniChart data={activeCoin.sparkline || []} color={activeCoin.priceChange1h > 0 ? '#22c55e' : '#ef4444'} />
+           </div>
+
            <ConfluenceMatrix analysis={analysis} />
            
            <div className="grid grid-cols-1 gap-4">
@@ -190,6 +268,9 @@ const App: React.FC = () => {
                 analysis={analysis} 
                 portfolioSize={33392} 
                 currentHeat={currentHeat}
+                currentPrice={activeCoin.price}
+                symbol={activeCoin.symbol}
+                onExecuteTrade={handleExecuteTrade}
                 userProfile={
                     // Find full config object
                     ['g0d','burry','pnguin'].includes(userProfile) 
@@ -243,6 +324,7 @@ const App: React.FC = () => {
               <div className="flex justify-between"><span>API Latency</span><span className="text-green-500">42ms</span></div>
               <div className="flex justify-between"><span>DB Sync</span><span className="text-green-500">OK</span></div>
               <div className="flex justify-between"><span>Simulation Mode</span><span className="text-blue-500">{isConnected ? 'OFF' : 'ACTIVE'}</span></div>
+              <div className="flex justify-between"><span>Audio FX</span><span className="text-green-500">ENABLED</span></div>
            </div>
         </div>
 
